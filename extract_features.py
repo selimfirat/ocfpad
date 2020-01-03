@@ -8,11 +8,9 @@ import torchvision.models as models
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset
 from tqdm import tqdm
-
+from bob.ip.qualitymeasure import galbally_iqm_features as iqm
 import numpy as np
 import os
-
-# TODO: create vgg16 features on faces
 
 
 class VideoFrames(Dataset):
@@ -36,10 +34,10 @@ class VideoFrames(Dataset):
 
 parser = argparse.ArgumentParser("Extract VGG Features From Videos")
 
-parser.add_argument("--input", default="data/replay_mobile/", type=str, help="Input directory to be extracted.")
-parser.add_argument("--output", default="/mnt/storage2/pad/replay_mobile/vgg16_frames.h5", help="Output file for frames to write.")
+parser.add_argument("--input", default="/mnt/storage2/pad/videos/replay_mobile/", type=str, help="Input directory to be extracted.")
+parser.add_argument("--output", default="/mnt/storage2/pad/replay_mobile/image_quality.h5", help="Output file for frames to write.")
 parser.add_argument("--device", default="cuda:1", type=str)
-parser.add_argument("--feature", default="vgg16", type=str, choices=["vgg16", "raw", "vggface"])
+parser.add_argument("--feature", default="image_quality", type=str, choices=["vgg16", "raw", "vggface", "image_quality"])
 parser.add_argument("--type", default="frame", type=str, choices=["frame", "face"])
 
 args = vars(parser.parse_args())
@@ -97,10 +95,26 @@ def vggface_features(x):
 
     return res_arr
 
+def image_quality_features(x):
+    x = x.detach().cpu().numpy()
+
+    res = []
+    for i in range(x.shape[0]):
+        rx = iqm.compute_quality_features(x[i, :, :, :])
+        res.append(np.array(rx))
+
+    res = np.array(res)
+
+    return res
+
+
 
 def raw_features(x):
 
     x = x.detach().cpu().numpy()
+    x *= 255
+    x = x.astype(np.uint8)
+    # print(x.max(), x.min(), x.mean(), x.std())
 
     return x
 
@@ -138,7 +152,7 @@ def extract_features(inp, feature_extractor, bboxes):
         transforms.ToTensor()
     ]
 
-    if args["feature"] != "vggface":
+    if args["feature"] == "vgg16":
         complst.append(
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         )
@@ -179,7 +193,7 @@ for root, dirs, files in tqdm(os.walk(input_path)):
             if "replay_mobile" in args["input"]:
                 faces_path = os.path.join(args["input"], "faceloc", "rect", hpath, file.replace(".mov", ".face"))
             elif "replay_attack" in args["input"]:
-                faces_path = os.path.join(args["input"], "face_locations", hpath, file.replace(".mov", ".face"))
+                faces_path = os.path.join(args["input"], "face-locations", hpath, file.replace(".mov", ".face"))
 
             bboxes = open(faces_path, "r").readlines()
 
