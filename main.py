@@ -12,11 +12,11 @@ os.environ["CUDA_VISIBLE_DEVICES"] = ""
 np.random.seed(1)
 
 
-def get_training_frames(f):
+def get_training_frames(f, dims=4096):
     split = "train"
     num_reals = sum(f[split]["real"][vid].shape[0] for vid in f[split]["real"])
 
-    X = np.zeros((num_reals, 4096))
+    X = np.zeros((num_reals, dims))
 
     cur = 0
     for vid_idx in f[split]["real"]:
@@ -142,7 +142,7 @@ parser.add_argument("--model", default="iforest", choices=["ocsvm", "iforest", "
 parser.add_argument("--aggregate", default="mean", choices=["mean", "max"], type=str, help="Aggregate block scores via mean/max or None")
 parser.add_argument("--data", default="replay_attack", choices=["replay_attack", "replay_mobile"], type=str)
 parser.add_argument("--data_path", default="/mnt/storage2/pad/", type=str)
-parser.add_argument("--features", default=["vgg16_frames"], nargs="+", choices=["vggface_faces", "vgg16_faces", "vgg16_frames", "vggface_frames", "raw_faces"])
+parser.add_argument("--features", default=["vgg16_frames"], nargs="+", choices=["vggface_faces", "vgg16_faces", "vgg16_frames", "vggface_frames", "raw_faces", "vgg16_normalized_faces"])
 parser.add_argument("--log", default=None, type=str)
 
 parser.add_argument("--interdb", default=False, action="store_true")
@@ -182,14 +182,14 @@ if not os.path.exists(model_path):
 
     if args["model"] == "ae":
         from pyod.models.auto_encoder import AutoEncoder
-        models["ae"] = AutoEncoder(epochs=50, preprocessing=False)
+        models["ae"] = AutoEncoder(epochs=50, preprocessing=args["normalize"])
 
-    if args["normalize"]:
+    if args["normalize"] and args["model"] != "ae":
         model = NormalizedModel(models[args["model"]])
     else:
         model = models[args["model"]]
 
-    X_train = get_training_frames(f)
+    X_train = get_training_frames(f, 4096 if not "image_quality" in "_".join(args["features"]) else 96)
 
     model.fit(X_train)
 

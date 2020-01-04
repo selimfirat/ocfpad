@@ -31,7 +31,8 @@ for datum in data:
                     for viddx, vidd in vid.items():
                         num_frames.append(vidd.shape[0])
 
-    sns.distplot(num_frames, kde=False, color="b", ax=axes)
+    ax = sns.distplot(num_frames, kde=False, color="b", ax=axes)
+    ax.set(title = datum.replace("_", " ").title() + " - Number of Frames Histogram", ylabel = "Number of Videos", xlabel="Number of Frames")
     plt.savefig(f"figures/num_frames_{datum}.pdf")
 
     df = pd.DataFrame(num_frames)

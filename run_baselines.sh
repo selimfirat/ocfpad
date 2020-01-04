@@ -2,7 +2,7 @@
 
 datas=( replay_attack replay_mobile )
 models=( iforest ocsvm ae )
-features=( vgg16_faces vgg16_frames )
+features=( vgg16_faces vgg16_frames vgg16_normalized_faces )
 aggregates=( mean max )
 normalizess=(" --normalize" "")
 
@@ -20,6 +20,5 @@ do
                 done
             done
         done
-        wait
     done
 done
