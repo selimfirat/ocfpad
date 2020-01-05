@@ -1,7 +1,5 @@
 import numpy as np
 import os
-os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"   # see issue #152
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 import pandas as pd
 import torch
@@ -15,16 +13,15 @@ from tqdm import tqdm
 import h5py
 
 from convolution_lstm import ConvLSTMCell
-import torch
-np.random.seed(0)
-torch.manual_seed(0)
+
 
 class ConvLSTMAutoencoder():
 
-    def __init__(self, num_epochs=1, lr=0.001):
+    def __init__(self, num_epochs=5, lr=0.001):
         self.model = ConvLSTMCell(input_channels=3, hidden_channels=3, kernel_size=3).cuda()
+        self.conv2d = nn.Conv2d(in_channels=3, out_channels=3, kernel_size=3, padding=1).cuda()
 
-        self.optimizer = Adam(self.model.parameters(), lr=lr) # default lr: 1e-3
+        self.optimizer = Adam(list(self.model.parameters()) + list(self.conv2d.parameters()), lr=lr) # default lr: 1e-3
 
         self.num_epochs = num_epochs
 
@@ -33,6 +30,7 @@ class ConvLSTMAutoencoder():
         h, c = self.model.init_hidden(batch_size=1, hidden=3, shape=(224, 224))
 
         self.model.zero_grad()
+        self.conv2d.zero_grad()
         self.optimizer.zero_grad()
 
         y_pred = torch.empty(X.shape).cuda()
@@ -42,7 +40,7 @@ class ConvLSTMAutoencoder():
 
             h, c = self.model.forward(frame, h, c)
 
-            y_pred[fidx, :, :, :] = h
+            y_pred[fidx, :, :, :] = self.conv2d(h)
 
         loss = torch.mean((y_pred - y) ** 2)
 
@@ -57,7 +55,7 @@ class ConvLSTMAutoencoder():
         self._classes = 2
 
         data = [x.unsqueeze(1) for x in X]
-
+        print(data[0].shape)
         targets = [data[i].clone() for i in range(len(data))]
 
         for i in range(self.num_epochs):
@@ -100,10 +98,11 @@ class ConvLSTMAutoencoder():
 
                 h, c = self.model.forward(frame, h, c)
 
-                y_pred[fidx, :, :, :] = h
+                y_pred[fidx, :, :, :] = self.conv2d(h)
 
             reconstruction_errors[idx] = torch.mean((y_pred - y_vid) ** 2).item()
 
+            print(reconstruction_errors[idx])
 
         return reconstruction_errors
 
@@ -175,12 +174,12 @@ def get_eval_videos(f, split, data_name):
 
 
 if __name__ == "__main__":
-    data_name = "replay_mobile"
-    path = os.path.join("/mnt/storage2/pad/", data_name, "raw_normalized_faces.h5")
+    path = os.path.join("/mnt/storage2/pad/", "replay_attack", "raw_faces.h5")
 
     f = h5py.File(path, "r")
 
     X = []
+    num_vids = 2
     for vid_idx, vid in tqdm(f["train"]["real"].items()):
 
         vid_arr = np.array(vid, dtype=np.float32) / 255
@@ -189,25 +188,31 @@ if __name__ == "__main__":
 
         X.append(vid_arr)
 
+
+        num_vids -= 1
+
     stae = ConvLSTMAutoencoder()
 
     stae.fit(X)
 
-    dev = get_eval_videos(f, "devel", data_name)
+    dev = get_eval_videos(f, "devel", "replay_attack")
 
-    y_dev = np.zeros((len(dev.keys()), 1))
-    y_dev_pred = np.zeros((len(dev.keys()), 1))
-
+    y_dev = np.zeros(len(dev.keys()))
+    y_dev_pred = np.zeros(len(dev.keys()))
     dev_videos = []
 
     data = []
-    for i, (name, vid) in tqdm(enumerate(dev.items())):
-        frame_scores = -stae.decision_function([vid["features"]])
+    for i, (name, vid) in enumerate(dev.items()):
 
-        y_dev_pred[i] = frame_scores
         y_dev[i] = vid["label"]
 
+        vid_arr = torch.tensor(vid["features"])
+
+        data.append(vid_arr)
+
         dev_videos.append(name)
+
+    y_dev_pred = -stae.decision_function(data)
 
     dev_eer, dev_roc_auc, threshold = calculate_metrics(y_dev, y_dev_pred)
 

@@ -2,6 +2,13 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 
+class ConvolutionalLSTMCell(nn.Module):
+
+    def __init__(self, in_channels, out_channels, kernel_size):
+        super().__init__()
+
+
+        
 
 class ConvLSTMCell(nn.Module):
     def __init__(self, input_channels, hidden_channels, kernel_size):

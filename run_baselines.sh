@@ -20,5 +20,6 @@ do
                 done
             done
         done
+    wait
     done
 done
