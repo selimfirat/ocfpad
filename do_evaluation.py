@@ -85,8 +85,12 @@ for model_folder in os.listdir(pkl_path):
 
     print(len(dev_videos))
 
-    for i in range(len(dev_videos)):
-        print(dev_videos[i])
+    num_bona_fide = 0
+    for dev_vid in dev_videos:
+        if not "attack" in dev_vid:
+            num_bona_fide += 1
+
+        print(dev_vid)
 
     # Replay-Attack
     # attack_mobile
