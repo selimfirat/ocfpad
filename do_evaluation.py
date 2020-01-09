@@ -1,3 +1,5 @@
+import bob
+
 import numpy as np
 import os
 import pickle
@@ -6,7 +8,7 @@ from bob.measure import eer, eer_threshold, plot
 from sklearn.metrics import roc_curve, roc_auc_score
 import matplotlib.pyplot as plt
 
-from plot_helpers import plot_scores_distributions
+from plot_helpers import plot_scores_distributions, compare_dets
 
 pkl_path = "/mnt/storage2/pad/pkl/"
 
@@ -41,6 +43,7 @@ def plot_det(negatives, positives, path, title):
 
     plt.clf()
 
+
 def plot_epc(dev_negatives, dev_positives, test_negatives, test_positives, path, title):
     plot.epc(dev_negatives, dev_positives, test_negatives, test_positives)
 
@@ -55,7 +58,40 @@ def plot_epc(dev_negatives, dev_positives, test_negatives, test_positives, path,
     plt.clf()
 
 
-for model_folder in os.listdir(pkl_path):
+def plot_det_comparison(y, y_pred, videos, fpath="figures/det_scenarios.pdf"):
+    vid_bonafide = np.zeros(len(videos), dtype=bool)
+    vid_mobile = np.zeros(len(videos), dtype=bool)
+    vid_highdef = np.zeros(len(videos), dtype=bool)
+    vid_print = np.zeros(len(videos), dtype=bool)
+
+    print(fpath, videos)
+    for i, vid in enumerate(videos):
+        if not "attack" in vid:
+            vid_bonafide[i] = True
+        elif "print" in vid:
+            vid_print[i] = True
+        elif "photo" in vid:
+            vid_mobile[i] = True
+        elif "video" in vid:
+            vid_highdef[i] = True
+
+
+    positives = y_pred[vid_bonafide]
+
+    print(sum(vid_bonafide), sum(vid_highdef), sum(vid_print), sum(vid_mobile))
+
+    scores_neg = [y_pred[vid_highdef], y_pred[vid_mobile], y_pred[vid_print]]
+    scores_pos = [positives, positives, positives]
+    types = ["photo", "video", "print"]
+    compare_dets(scores_neg, scores_pos, types, [10, 90, 10, 90])
+
+    plt.savefig(fpath)
+
+    plt.clf()
+
+
+"""
+for model_folder in reversed(os.listdir(pkl_path)):
     scores_pkl = os.path.join(pkl_path, model_folder, "scores.pkl")
     print(model_folder)
 
@@ -63,7 +99,12 @@ for model_folder in os.listdir(pkl_path):
         continue
 
     with open(scores_pkl, "rb") as m:
-        y_dev, y_dev_pred, dev_videos, y_dev_frames, y_dev_frames_pred, dev_videos_frames, y_test, y_test_pred, test_videos, y_test_frames, y_test_frames_pred, test_videos_frames = pickle.load(m)
+        r = pickle.load(m)
+
+    if len(r) == 12:
+        y_dev, y_dev_pred, dev_videos, y_dev_frames, y_dev_frames_pred, dev_videos_frames, y_test, y_test_pred, test_videos, y_test_frames, y_test_frames_pred, test_videos_frames = r
+    else:
+        y_dev, y_dev_pred, dev_videos, y_test, y_test_pred, test_videos = r
 
     dev_negatives, dev_positives = y_dev_pred[y_dev==0], y_dev_pred[y_dev==1]
     test_negatives, test_positives = y_test_pred[y_test==0], y_test_pred[y_test==1]
@@ -71,10 +112,6 @@ for model_folder in os.listdir(pkl_path):
     plot_far_frr(dev_negatives, dev_positives, "figures/test_roc.pdf", "FAR vs. FRR Curve")
     plot_epc(dev_negatives, dev_positives, test_negatives, test_positives, "figures/test_epc.pdf", "Expected Performance Curve")
     plot_det(dev_negatives, dev_positives, "figures/test_det.pdf", "Detection Error Trade-off Curve")
-
-    y_dev_print = np.zeros((len(y_dev), 1))
-    y_dev_mobile = np.zeros((len(y_dev), 1))
-    y_dev_highdef = np.zeros((len(y_dev), 1))
 
     plot_scores_distributions([dev_negatives, dev_positives], [test_negatives, test_positives], path="figures/test_hists.pdf")
 
@@ -85,12 +122,9 @@ for model_folder in os.listdir(pkl_path):
 
     print(len(dev_videos))
 
-    num_bona_fide = 0
-    for dev_vid in dev_videos:
-        if not "attack" in dev_vid:
-            num_bona_fide += 1
+    plot_det_comparison(y_test, y_test_pred, test_videos)
 
-        print(dev_vid)
+
 
     # Replay-Attack
     # attack_mobile
@@ -103,3 +137,4 @@ for model_folder in os.listdir(pkl_path):
     # attack_print
 
     break
+"""

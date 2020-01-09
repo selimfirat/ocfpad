@@ -13,7 +13,7 @@ import torch
 from convlstm_autoencoder import ConvLSTMAutoencoder
 
 
-def calculate_metrics(y, y_pred, threshold=None):
+def calculate_metrics(y, y_pred, threshold=None, test_videos=None):
 
     if threshold == None:
         fpr, tpr, threshold = roc_curve(y, y_pred, pos_label=1)
@@ -28,6 +28,34 @@ def calculate_metrics(y, y_pred, threshold=None):
         eer = eer[0]
 
     roc_auc = roc_auc_score(y, y_pred)
+
+    if test_videos:
+        vid_bonafide = np.zeros(len(test_videos), dtype=bool)
+        vid_mobile = np.zeros(len(test_videos), dtype=bool)
+        vid_highdef = np.zeros(len(test_videos), dtype=bool)
+        vid_print = np.zeros(len(test_videos), dtype=bool)
+
+        for i, vid in enumerate(test_videos):
+            if not "attack" in vid:
+                vid_bonafide[i] = True
+            elif "photo" in vid:
+                vid_mobile[i] = True
+            elif "video" in vid:
+                vid_highdef[i] = True
+            elif "print" in vid:
+                vid_print[i] = True
+
+        test_far_mobile = sum(y_test_pred[vid_mobile] >= threshold) / sum(vid_mobile)
+        test_far_highdef = sum(y_test_pred[vid_highdef] >= threshold) / sum(vid_highdef)
+        test_far_print = sum(y_test_pred[vid_print] >= threshold) / sum(vid_print)
+        bpcer = sum(y_test_pred[vid_bonafide] < threshold) / sum(vid_bonafide)
+
+        apcer = max(test_far_mobile, test_far_highdef, test_far_print)
+
+        acer = (apcer + bpcer)/2
+
+        print("ACER", acer)
+
 
     return eer, roc_auc, threshold
 
@@ -108,7 +136,11 @@ if __name__ == "__main__":
         os.makedirs(pkl_path)
 
     model_path = os.path.join(pkl_path, "model.h5")
-    scores_path = os.path.join(pkl_path, "scores.pkl")
+
+    if args["interdb"]:
+        scores_path = os.path.join(pkl_path, "interdb_scores.pkl")
+    else:
+        scores_path = os.path.join(pkl_path, "scores.pkl")
 
     if not os.path.exists(model_path):
         X = []
@@ -150,7 +182,18 @@ if __name__ == "__main__":
         print("Per-Video Results")
         print(f"Development EER: {np.round(dev_eer, 4)} ROC (AUC): {np.round(dev_roc_auc,4)}")
 
-        test = get_eval_videos(f, "test", args["data"])
+
+        if args["interdb"]:
+            other_data = "replay_attack" if args['data'] == "replay_mobile" else "replay_mobile"
+
+
+            other_path = os.path.join("/mnt/storage2/pad/", other_data, args["feature"] + ".h5")
+
+            other_f = h5py.File(other_path, "r")
+            test = get_eval_videos(other_f, "test", other_data)
+
+        else:
+            test = get_eval_videos(f, "test", args["data"])
 
         y_test = np.zeros(len(test.keys()))
         y_test_pred = np.zeros(len(test.keys()))
@@ -166,7 +209,7 @@ if __name__ == "__main__":
 
             test_videos.append(name)
 
-        test_eer, test_roc_auc, _ = calculate_metrics(y_test, y_test_pred)
+        test_eer, test_roc_auc, _ = calculate_metrics(y_test, y_test_pred, test_videos=test_videos)
 
         print(f"Test HTER: {np.round(test_eer, 4)} ROC (AUC): {np.round(test_roc_auc,4)}")
 

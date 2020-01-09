@@ -134,6 +134,32 @@ def calculate_all_metrics(y_dev, y_dev_pred, dev_videos, y_dev_frames, y_dev_fra
     print(f"Development EER: {np.round(dev_frames_eer, 4)} ROC (AUC): {np.round(dev_frames_roc_auc,4)}")
     print(f"Test HTER: {np.round(test_frames_hter, 4)} ROC (AUC): {np.round(test_frames_roc_auc,4)}")
 
+    vid_bonafide = np.zeros(len(test_videos), dtype=bool)
+    vid_mobile = np.zeros(len(test_videos), dtype=bool)
+    vid_highdef = np.zeros(len(test_videos), dtype=bool)
+    vid_print = np.zeros(len(test_videos), dtype=bool)
+
+    for i, vid in enumerate(test_videos):
+        if not "attack" in vid:
+            vid_bonafide[i] = True
+        elif "photo" in vid:
+            vid_mobile[i] = True
+        elif "video" in vid:
+            vid_highdef[i] = True
+        elif "print" in vid:
+            vid_print[i] = True
+
+    test_far_mobile = sum(y_test_pred[vid_mobile] >= threshold) / sum(vid_mobile)
+    test_far_highdef = sum(y_test_pred[vid_highdef] >= threshold) / sum(vid_highdef)
+    test_far_print = sum(y_test_pred[vid_print] >= threshold) / sum(vid_print)
+    bpcer = sum(y_test_pred[vid_bonafide] < threshold) / sum(vid_bonafide)
+
+    apcer = max(test_far_mobile, test_far_highdef, test_far_print)
+
+    acer = (apcer + bpcer)/2
+
+    print("ACER", acer)
+
     return dev_eer, dev_roc_auc, threshold, test_hter, test_roc_auc, dev_frames_eer, dev_frames_roc_auc, frames_threshold, test_frames_hter, test_frames_roc_auc
 
 parser = argparse.ArgumentParser("One Class Face Presentation Attack Detection Pipeline")
@@ -142,7 +168,7 @@ parser.add_argument("--model", default="iforest", choices=["ocsvm", "iforest", "
 parser.add_argument("--aggregate", default="mean", choices=["mean", "max"], type=str, help="Aggregate block scores via mean/max or None")
 parser.add_argument("--data", default="replay_attack", choices=["replay_attack", "replay_mobile"], type=str)
 parser.add_argument("--data_path", default="/mnt/storage2/pad/", type=str)
-parser.add_argument("--features", default=["vgg16_frames"], nargs="+", choices=["vggface_faces", "vgg16_faces", "vgg16_frames", "vggface_frames", "raw_faces", "vgg16_normalized_faces"])
+parser.add_argument("--features", default=["vgg16_frames"], nargs="+", choices=["image_quality", "vgg16_faces", "vgg16_frames", "vggface_frames", "raw_faces", "vgg16_normalized_faces"])
 parser.add_argument("--log", default=None, type=str)
 
 parser.add_argument("--interdb", default=False, action="store_true")
@@ -182,14 +208,18 @@ if not os.path.exists(model_path):
 
     if args["model"] == "ae":
         from pyod.models.auto_encoder import AutoEncoder
-        models["ae"] = AutoEncoder(epochs=50, preprocessing=args["normalize"])
+        if args["features"][0] == "image_quality":
+            hidden_neurons = [18, 18, 18, 18]
+        else:
+            hidden_neurons = None
+        models["ae"] = AutoEncoder(epochs=50, preprocessing=args["normalize"], hidden_neurons=hidden_neurons)
 
     if args["normalize"] and args["model"] != "ae":
         model = NormalizedModel(models[args["model"]])
     else:
         model = models[args["model"]]
 
-    X_train = get_training_frames(f, 4096 if not "image_quality" in "_".join(args["features"]) else 96)
+    X_train = get_training_frames(f, 4096 if not "image_quality" in "_".join(args["features"]) else 18)
 
     model.fit(X_train)
 
